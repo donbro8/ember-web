@@ -27,3 +27,11 @@ npm-debug.log*
 # typescript
 *.tsbuildinfo
 next-env.d.ts
+
+# Governance artifacts (SMA-managed)
+.claude/
+.contracts/
+.tasks/
+docs/architecture.md
+docs/tech-spec.md
+docs/detail-spec/
