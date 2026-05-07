@@ -1,7 +1,7 @@
 "use client";
 
 import { useState, useRef, useEffect } from "react";
-import { sendMessage } from "@/lib/api";
+import { sendMessage, AGENTS, type AgentId } from "@/lib/api";
 import Message from "@/components/Message";
 
 interface ChatMessage {
@@ -13,11 +13,14 @@ export default function Chat() {
   const [messages, setMessages] = useState<ChatMessage[]>([]);
   const [input, setInput] = useState("");
   const [loading, setLoading] = useState(false);
+  const [agent, setAgent] = useState<AgentId>("discovery");
   const messagesEndRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
     messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
   }, [messages]);
+
+  const selectedAgent = AGENTS.find((a) => a.id === agent)!;
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -30,7 +33,7 @@ export default function Chat() {
     setLoading(true);
 
     try {
-      const response = await sendMessage(trimmed);
+      const response = await sendMessage(trimmed, agent);
       const assistantMessage: ChatMessage = {
         role: "assistant",
         content: response,
@@ -69,6 +72,27 @@ export default function Chat() {
         <div ref={messagesEndRef} />
       </div>
       <form onSubmit={handleSubmit} className="p-4 border-t border-gray-200 dark:border-gray-700">
+        <div className="flex items-center gap-2 mb-2">
+          <label htmlFor="agent-select" className="text-xs font-medium text-gray-500 dark:text-gray-400">
+            Agent:
+          </label>
+          <select
+            id="agent-select"
+            value={agent}
+            onChange={(e) => setAgent(e.target.value as AgentId)}
+            disabled={loading}
+            className="rounded-md border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-800 px-2 py-1 text-xs focus:outline-none focus:ring-2 focus:ring-blue-500"
+          >
+            {AGENTS.map((a) => (
+              <option key={a.id} value={a.id}>
+                {a.label}
+              </option>
+            ))}
+          </select>
+          <span className="text-xs text-gray-400 dark:text-gray-500">
+            {selectedAgent.description}
+          </span>
+        </div>
         <div className="flex gap-2">
           <input
             type="text"
