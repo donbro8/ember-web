@@ -1,6 +1,7 @@
 "use client";
 
 import ReactMarkdown from "react-markdown";
+import remarkGfm from "remark-gfm";
 
 interface MessageProps {
   role: "user" | "assistant";
@@ -13,7 +14,7 @@ export default function Message({ role, content }: MessageProps) {
   return (
     <div className={`flex ${isUser ? "justify-end" : "justify-start"} mb-4`}>
       <div
-        className={`max-w-[80%] rounded-lg px-4 py-3 ${
+        className={`max-w-full rounded-lg px-4 py-3 ${
           isUser
             ? "bg-blue-600 text-white"
             : "bg-gray-200 text-gray-900 dark:bg-gray-700 dark:text-gray-100"
@@ -24,6 +25,7 @@ export default function Message({ role, content }: MessageProps) {
         ) : (
           <div className="prose prose-sm dark:prose-invert max-w-none">
             <ReactMarkdown
+              remarkPlugins={[remarkGfm]}
               components={{
                 a: ({ href, children, ...props }) => (
                   <a
