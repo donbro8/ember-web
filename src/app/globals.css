@@ -1,2 +1,21 @@
 @import "tailwindcss";
 @plugin "@tailwindcss/typography";
+
+.prose table {
+  @apply w-full border-collapse text-sm;
+  display: block;
+  overflow-x: auto;
+  -webkit-overflow-scrolling: touch;
+}
+
+.prose thead th {
+  @apply bg-gray-100 dark:bg-gray-800 font-semibold text-left px-3 py-2 border-b border-gray-300 dark:border-gray-600;
+}
+
+.prose tbody td {
+  @apply px-3 py-2 border-b border-gray-200 dark:border-gray-700;
+}
+
+.prose tbody tr:nth-child(even) {
+  @apply bg-gray-50 dark:bg-gray-800/50;
+}

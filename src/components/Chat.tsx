@@ -22,6 +22,12 @@ export default function Chat() {
 
   const selectedAgent = AGENTS.find((a) => a.id === agent)!;
 
+  const loadingMessages: Record<string, string> = {
+    discovery: "Searching patents and FDA databases...",
+    search: "Analyzing query and fetching candidates...",
+    biosimilar: "Running biosimilar screening pipeline...",
+  };
+
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     const trimmed = input.trim();
@@ -42,7 +48,7 @@ export default function Chat() {
     } catch (error) {
       const errorMessage: ChatMessage = {
         role: "assistant",
-        content: `Error: ${error instanceof Error ? error.message : "Something went wrong"}`,
+        content: `> **Error**\n>\n> ${error instanceof Error ? error.message : "Something went wrong"}.\n>\n> Please try again or select a different agent.`,
       };
       setMessages((prev) => [...prev, errorMessage]);
     } finally {
@@ -65,7 +71,7 @@ export default function Chat() {
         {loading && (
           <div className="flex justify-start mb-4">
             <div className="bg-gray-200 dark:bg-gray-700 rounded-lg px-4 py-2 text-sm text-gray-500 dark:text-gray-400">
-              Searching...
+              {loadingMessages[agent] || "Processing..."}
             </div>
           </div>
         )}

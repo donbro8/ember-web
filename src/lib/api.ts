@@ -12,18 +12,18 @@ export const AGENTS: AgentOption[] = [
   {
     id: "discovery",
     label: "Discovery",
-    description: "Search patents and FDA adverse-event data",
+    description: "Search patent and FDA adverse event databases by drug name",
   },
   {
     id: "search",
     label: "Drug Search",
     description:
-      "Multi-source drug discovery with ranked scoring across trials, patents, and literature",
+      "Find drug candidates by target, indication, or modality across multiple databases",
   },
   {
     id: "biosimilar",
     label: "Biosimilar Screening",
-    description: "Screen monoclonal antibodies for biosimilar development opportunity",
+    description: "Screen biologics (mAbs, fusion proteins, insulins, ADCs, and more) for biosimilar development opportunity",
   },
 ];
 

@@ -23,7 +23,24 @@ export default function Message({ role, content }: MessageProps) {
           <p className="text-sm">{content}</p>
         ) : (
           <div className="prose prose-sm dark:prose-invert max-w-none">
-            <ReactMarkdown>{content}</ReactMarkdown>
+            <ReactMarkdown
+              components={{
+                a: ({ href, children, ...props }) => (
+                  <a
+                    href={href}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="text-blue-600 dark:text-blue-400 underline hover:text-blue-800 dark:hover:text-blue-300"
+                    {...props}
+                  >
+                    {children}
+                    <span className="inline-block ml-0.5 text-xs">↗</span>
+                  </a>
+                ),
+              }}
+            >
+              {content}
+            </ReactMarkdown>
           </div>
         )}
       </div>
