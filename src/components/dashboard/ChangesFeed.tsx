@@ -127,9 +127,10 @@ function groupByDate(
 
 interface ChangesFeedProps {
   watchId: string;
+  changeSummary?: string | null;
 }
 
-export default function ChangesFeed({ watchId }: ChangesFeedProps) {
+export default function ChangesFeed({ watchId, changeSummary }: ChangesFeedProps) {
   const [changes, setChanges] = useState<ChangeEntry[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -139,7 +140,7 @@ export default function ChangesFeed({ watchId }: ChangesFeedProps) {
     setError(null);
     try {
       const data = await getChanges(watchId);
-      setChanges(data);
+      setChanges(data.changes);
     } catch (err) {
       setError(err instanceof Error ? err.message : "Failed to load changes");
     } finally {
@@ -213,6 +214,21 @@ export default function ChangesFeed({ watchId }: ChangesFeedProps) {
 
   return (
     <div className="space-y-6">
+      {changeSummary && (
+        <div className="rounded-lg border border-amber-200 dark:border-amber-800 bg-amber-50 dark:bg-amber-950/30 px-4 py-3">
+          <div className="flex items-center gap-2 mb-1">
+            <span className="text-xs font-semibold uppercase tracking-wide text-amber-700 dark:text-amber-300">
+              Change Summary
+            </span>
+            <span className="inline-flex items-center rounded-full bg-amber-100 dark:bg-amber-900/50 px-2 py-0.5 text-[10px] font-medium text-amber-600 dark:text-amber-400">
+              AI-generated
+            </span>
+          </div>
+          <p className="text-sm italic text-amber-900 dark:text-amber-100 leading-relaxed">
+            {changeSummary}
+          </p>
+        </div>
+      )}
       {groups.map((group) => (
         <section key={group.date}>
           <h3 className="mb-3 text-sm font-semibold text-gray-500 dark:text-gray-400">

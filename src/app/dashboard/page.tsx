@@ -12,6 +12,7 @@ import RowExpansion from "@/components/dashboard/RowExpansion";
 import ChangesFeed from "@/components/dashboard/ChangesFeed";
 import CsvExport from "@/components/dashboard/CsvExport";
 import RunSelector from "@/components/dashboard/RunSelector";
+import SynthesisOverview from "@/components/dashboard/SynthesisOverview";
 import EmptyState from "@/components/ui/EmptyState";
 
 // ---------------------------------------------------------------------------
@@ -95,6 +96,7 @@ function DashboardContent() {
   const initialWatchId = searchParams.get("watch_id");
   const initialRunId = searchParams.get("run_id");
   const initialTab = (searchParams.get("tab") as TabKey) || "results";
+  const initialSynthesisOverview = searchParams.get("synthesis_overview");
 
   // Core state
   const [watchId] = useState<string | null>(initialWatchId);
@@ -107,6 +109,7 @@ function DashboardContent() {
   const [results, setResults] = useState<CandidateResult[]>([]);
   const [filteredResults, setFilteredResults] = useState<CandidateResult[]>([]);
   const [expandedId, setExpandedId] = useState<string | null>(null);
+  const [synthesisOverview, setSynthesisOverview] = useState<string | null>(initialSynthesisOverview);
 
   // Loading / error state
   const [loading, setLoading] = useState(true);
@@ -165,6 +168,7 @@ function DashboardContent() {
     setLoading(true);
     setError(null);
     setExpandedId(null);
+    setSynthesisOverview(null);
 
     try {
       const resultsData = await getResults(newRunId);
@@ -221,6 +225,12 @@ function DashboardContent() {
         ? results.find((r) => r.canonical_id === expandedId) ?? null
         : null,
     [expandedId, results],
+  );
+
+  // Derive change_summary for the current run
+  const currentRunChangeSummary = useMemo(
+    () => runs.find((r) => r.run_id === runId)?.change_summary ?? null,
+    [runs, runId],
   );
 
   // Page title
@@ -289,6 +299,9 @@ function DashboardContent() {
             {/* Results content */}
             {!loading && !error && (
               <>
+                {/* Synthesis overview */}
+                <SynthesisOverview overview={synthesisOverview} />
+
                 {/* FilterBar */}
                 <FilterBar results={results} onFilter={handleFilter} />
 
@@ -350,7 +363,7 @@ function DashboardContent() {
         {activeTab === "changes" && (
           <div role="tabpanel" id="tabpanel-changes" aria-labelledby="tab-changes">
             {watchId ? (
-              <ChangesFeed watchId={watchId} />
+              <ChangesFeed watchId={watchId} changeSummary={currentRunChangeSummary} />
             ) : (
               <EmptyState
                 title="No watch selected"

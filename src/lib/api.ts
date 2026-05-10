@@ -1,6 +1,7 @@
 import type {
   CandidateResult,
-  ChangeEntry,
+  ChangesResponse,
+  DigestOutput,
   HealthResponse,
   RunSummary,
   WatchConfig,
@@ -26,7 +27,7 @@ async function assertOk(res: Response, endpoint: string): Promise<void> {
 
 export async function queryAgent(
   query: string,
-): Promise<{ response: string; run_id: string; cached: boolean }> {
+): Promise<{ response: string; run_id: string; cached: boolean; synthesis_overview: string | null }> {
   const endpoint = "/query";
   const res = await fetch(`${API_URL}${endpoint}`, {
     method: "POST",
@@ -153,15 +154,27 @@ export async function triggerRun(
 export async function getChanges(
   watch_id: string,
   limit?: number,
-): Promise<ChangeEntry[]> {
+): Promise<ChangesResponse> {
   const params = new URLSearchParams();
   if (limit !== undefined) params.set("limit", String(limit));
   const qs = params.toString();
   const endpoint = `/watches/${encodeURIComponent(watch_id)}/changes${qs ? `?${qs}` : ""}`;
   const res = await fetch(`${API_URL}${endpoint}`);
   await assertOk(res, endpoint);
-  const data = await res.json();
-  return data.changes;
+  return res.json();
+}
+
+// ---------------------------------------------------------------------------
+// Digest
+// ---------------------------------------------------------------------------
+
+export async function getDigest(
+  period_days: number = 7,
+): Promise<DigestOutput> {
+  const endpoint = `/digest?period_days=${period_days}`;
+  const res = await fetch(`${API_URL}${endpoint}`);
+  await assertOk(res, endpoint);
+  return res.json();
 }
 
 // ---------------------------------------------------------------------------

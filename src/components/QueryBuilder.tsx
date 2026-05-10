@@ -20,7 +20,11 @@ export default function QueryBuilder() {
 
     try {
       const data = await queryAgent(trimmed);
-      router.push(`/dashboard?run_id=${encodeURIComponent(data.run_id)}`);
+      const params = new URLSearchParams({ run_id: data.run_id });
+      if (data.synthesis_overview) {
+        params.set("synthesis_overview", data.synthesis_overview);
+      }
+      router.push(`/dashboard?${params.toString()}`);
     } catch (err) {
       setError(
         err instanceof Error ? err.message : "Something went wrong. Please try again.",

@@ -154,6 +154,42 @@ export interface RunSummary {
   query: string;
   result_count: number;
   cached: boolean;
+  change_summary: string | null;
+}
+
+// ---------------------------------------------------------------------------
+// Digest
+// ---------------------------------------------------------------------------
+
+export interface OpportunityHighlight {
+  display_label: string;
+  reason: string;
+  watch_name: string;
+}
+
+export interface WatchDigestSection {
+  watch_name: string;
+  summary: string;
+  change_count: number;
+  highlight: string | null;
+}
+
+export interface DigestOutput {
+  period_start: string;
+  period_end: string;
+  summary: string;
+  per_watch: WatchDigestSection[];
+  top_opportunities: OpportunityHighlight[];
+  stable_watches: string[];
+}
+
+// ---------------------------------------------------------------------------
+// Changes response
+// ---------------------------------------------------------------------------
+
+export interface ChangesResponse {
+  changes: ChangeEntry[];
+  change_summary: string | null;
 }
 
 // ---------------------------------------------------------------------------
