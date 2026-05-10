@@ -1,7 +1,7 @@
 "use client";
 
 import { useState, useRef, useEffect } from "react";
-import { sendMessage } from "@/lib/api";
+import { queryAgent } from "@/lib/api";
 import Message from "@/components/Message";
 
 interface ChatMessage {
@@ -30,10 +30,10 @@ export default function Chat() {
     setLoading(true);
 
     try {
-      const response = await sendMessage(trimmed);
+      const data = await queryAgent(trimmed);
       const assistantMessage: ChatMessage = {
         role: "assistant",
-        content: response,
+        content: data.response,
       };
       setMessages((prev) => [...prev, assistantMessage]);
     } catch (error) {
