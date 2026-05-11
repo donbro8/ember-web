@@ -10,7 +10,7 @@ import FilterChip from "@/components/ui/FilterChip";
 // ---------------------------------------------------------------------------
 
 type BiosimilarFilter = "all" | "has" | "none";
-type ExpiryWindow = "6mo" | "1yr" | "2yr" | "5yr" | "all";
+type ExpiryWindow = "6mo" | "1yr" | "2yr" | "5yr" | "unknown" | "invalid" | "all";
 
 interface FilterState {
   search: string;
@@ -37,15 +37,31 @@ const EXPIRY_WINDOW_LABELS: Record<ExpiryWindow, string> = {
   "1yr": "Next 1 year",
   "2yr": "Next 2 years",
   "5yr": "Next 5 years",
+  unknown: "Unknown expiry",
+  invalid: "Invalid expiry date",
   all: "All",
 };
 
-const EXPIRY_WINDOW_MONTHS: Record<Exclude<ExpiryWindow, "all">, number> = {
+const EXPIRY_WINDOW_MONTHS: Record<Exclude<ExpiryWindow, "all" | "unknown" | "invalid">, number> = {
   "6mo": 6,
   "1yr": 12,
   "2yr": 24,
   "5yr": 60,
 };
+
+const EXPIRY_WINDOWS: ExpiryWindow[] = [
+  "6mo",
+  "1yr",
+  "2yr",
+  "5yr",
+  "unknown",
+  "invalid",
+  "all",
+];
+
+function isExpiryWindow(value: string | null): value is ExpiryWindow {
+  return value != null && EXPIRY_WINDOWS.includes(value as ExpiryWindow);
+}
 
 const DEFAULT_FILTER: FilterState = {
   search: "",
@@ -78,12 +94,13 @@ function filtersToParams(f: FilterState): URLSearchParams {
 function paramsToFilters(p: URLSearchParams): FilterState {
   const smin = parseFloat(p.get("smin") ?? "0");
   const smax = parseFloat(p.get("smax") ?? "1");
+  const exp = p.get("exp");
   return {
     search: p.get("q") ?? "",
     scoreMin: Number.isFinite(smin) ? Math.max(0, Math.min(1, smin)) : 0,
     scoreMax: Number.isFinite(smax) ? Math.max(0, Math.min(1, smax)) : 1,
     categories: p.get("cat")?.split(",").filter(Boolean) ?? [],
-    expiryWindow: (p.get("exp") as ExpiryWindow) ?? "all",
+    expiryWindow: isExpiryWindow(exp) ? exp : "all",
     jurisdictions: p.get("jur")?.split(",").filter(Boolean) ?? [],
     biosimilar: (p.get("bio") as BiosimilarFilter) ?? "all",
     trialPhases: p.get("phase")?.split(",").filter(Boolean) ?? [],
@@ -93,6 +110,12 @@ function paramsToFilters(p: URLSearchParams): FilterState {
 // ---------------------------------------------------------------------------
 // Filter logic
 // ---------------------------------------------------------------------------
+
+function parseExpiryDate(expiry: string | null | undefined): Date | null {
+  if (!expiry) return null;
+  const parsed = new Date(expiry);
+  return Number.isNaN(parsed.getTime()) ? null : parsed;
+}
 
 function applyFilters(
   results: CandidateResult[],
@@ -132,8 +155,15 @@ function applyFilters(
 
     // Patent expiry window
     if (f.expiryWindow !== "all") {
-      if (!r.earliest_patent_expiry) return false;
-      const expiry = new Date(r.earliest_patent_expiry);
+      const rawExpiry = r.earliest_patent_expiry;
+      const expiry = parseExpiryDate(rawExpiry);
+      if (f.expiryWindow === "unknown") {
+        return rawExpiry == null || rawExpiry.trim().length === 0;
+      }
+      if (f.expiryWindow === "invalid") {
+        return rawExpiry != null && rawExpiry.trim().length > 0 && expiry == null;
+      }
+      if (!rawExpiry || !expiry) return false;
       const cutoff = new Date(now);
       cutoff.setMonth(
         cutoff.getMonth() + EXPIRY_WINDOW_MONTHS[f.expiryWindow],
@@ -174,6 +204,22 @@ export default function FilterBar({ results, onFilter }: FilterBarProps) {
   const [filters, setFilters] = useState<FilterState>(() =>
     paramsToFilters(searchParams),
   );
+  const expiryImpact = useMemo(() => {
+    const withoutExpiry = results.filter((r) => {
+      const raw = r.earliest_patent_expiry;
+      return raw == null || raw.trim().length === 0;
+    }).length;
+    const invalidExpiry = results.filter((r) => {
+      const raw = r.earliest_patent_expiry;
+      return raw != null && raw.trim().length > 0 && parseExpiryDate(raw) == null;
+    }).length;
+    const filtered = applyFilters(results, filters);
+    return {
+      withoutExpiry,
+      invalidExpiry,
+      hidden: Math.max(0, results.length - filtered.length),
+    };
+  }, [filters, results]);
 
   // Prevent re-applying URL update when we triggered it ourselves
   const selfUpdate = useRef(false);
@@ -476,6 +522,9 @@ export default function FilterBar({ results, onFilter }: FilterBarProps) {
                   </option>
                 ))}
               </select>
+              <p className="mt-1 text-xs text-gray-500 dark:text-gray-400">
+                Hidden: {expiryImpact.hidden} rows. Unknown expiry: {expiryImpact.withoutExpiry}. Invalid expiry: {expiryImpact.invalidExpiry}.
+              </p>
             </div>
 
             {/* Jurisdiction */}

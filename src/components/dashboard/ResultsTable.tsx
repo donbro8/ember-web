@@ -5,6 +5,7 @@ import type { CandidateResult, PatentJurisdiction } from "@/lib/types";
 import SortableHeader from "@/components/ui/SortableHeader";
 import Badge from "@/components/ui/Badge";
 import EmptyState from "@/components/ui/EmptyState";
+import { normalizeSafeHttpUrl } from "@/components/dashboard/linkSafety";
 
 const PAGE_SIZE = 50;
 
@@ -26,6 +27,53 @@ interface ResultsTableProps {
   results: CandidateResult[];
   onRowClick?: (result: CandidateResult) => void;
   expandedId?: string | null;
+}
+
+interface SourceLink {
+  label: string;
+  url: string;
+  verified: boolean;
+}
+
+function extractSourceLinks(result: CandidateResult): SourceLink[] {
+  const links: SourceLink[] = [];
+  const dynamic = result as CandidateResult & Record<string, unknown>;
+  const verifiedSourceLinks = dynamic.verified_source_links;
+  if (Array.isArray(verifiedSourceLinks)) {
+    for (const entry of verifiedSourceLinks) {
+      if (!entry || typeof entry !== "object") continue;
+      const map = entry as Record<string, unknown>;
+      const safeUrl = normalizeSafeHttpUrl(map.url);
+      if (!safeUrl) continue;
+      links.push({
+        label: typeof map.label === "string" && map.label ? map.label : "Verified source",
+        url: safeUrl,
+        verified: true,
+      });
+    }
+  }
+  result.sources_contributed.forEach((source, i) => {
+    const url = normalizeSafeHttpUrl(result.source_urls[i] ?? null);
+    if (!url) return;
+    links.push({ label: source, url, verified: false });
+  });
+  return links;
+}
+
+function bestSourceLink(result: CandidateResult): SourceLink | null {
+  const links = extractSourceLinks(result);
+  if (links.length === 0) return null;
+  const score = (link: SourceLink) => {
+    let s = 0;
+    if (link.verified) s += 100;
+    if (/\.gov\//i.test(link.url)) s += 20;
+    if (/pubmed|doi\.org|clinicaltrials/i.test(link.url)) s += 10;
+    return s;
+  };
+  const scored = links.map((link) => ({ link, score: score(link) }));
+  scored.sort((a, b) => b.score - a.score || a.link.url.localeCompare(b.link.url));
+  if (scored.length > 1 && scored[0].score === scored[1].score) return null;
+  return scored[0].link;
 }
 
 /** Map category strings to Badge variants. */
@@ -268,12 +316,17 @@ export default function ResultsTable({
                   onSort={handleSort}
                 />
               </th>
+              <th scope="col" className="px-4 py-3 text-left">
+                Sources
+              </th>
             </tr>
           </thead>
           <tbody className="divide-y divide-gray-100 dark:divide-gray-800 bg-white dark:bg-gray-900">
             {pageResults.map((r) => {
               const jurisdiction = buildJurisdictionSummary(r.patents);
               const isExpanded = expandedId === r.canonical_id;
+              const sources = extractSourceLinks(r);
+              const directSource = bestSourceLink(r);
 
               return (
                 <tr
@@ -387,6 +440,39 @@ export default function ResultsTable({
                   {/* Biosimilar Competitors */}
                   <td className="px-4 py-3 text-sm tabular-nums text-gray-700 dark:text-gray-300 whitespace-nowrap">
                     {r.biosimilar_competitor_count}
+                  </td>
+
+                  {/* Source links */}
+                  <td className="px-4 py-3 text-sm text-gray-700 dark:text-gray-300 whitespace-nowrap">
+                    <div className="flex flex-col gap-1">
+                      <span className="inline-flex items-center gap-1" title={`${sources.length} linked source(s)`}>
+                        <svg
+                          className="h-3.5 w-3.5 text-gray-500 dark:text-gray-400"
+                          fill="none"
+                          viewBox="0 0 24 24"
+                          strokeWidth={2}
+                          stroke="currentColor"
+                        >
+                          <path strokeLinecap="round" strokeLinejoin="round" d="M13.19 8.688a4.5 4.5 0 016.364 6.364l-3 3a4.5 4.5 0 01-6.364 0m3.182-9.546a4.5 4.5 0 00-6.364 0l-3 3a4.5 4.5 0 106.364 6.364" />
+                        </svg>
+                        <span className="tabular-nums">{sources.length}</span>
+                      </span>
+                      {directSource ? (
+                        <a
+                          href={directSource.url}
+                          target="_blank"
+                          rel="noopener noreferrer"
+                          onClick={(e) => e.stopPropagation()}
+                          className="text-xs text-blue-600 dark:text-blue-400 hover:underline"
+                        >
+                          {directSource.verified ? "Verified source" : directSource.label}
+                        </a>
+                      ) : (
+                        <span className="text-xs text-gray-500 dark:text-gray-400">
+                          No deterministic top link
+                        </span>
+                      )}
+                    </div>
                   </td>
                 </tr>
               );

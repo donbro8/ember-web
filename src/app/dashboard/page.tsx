@@ -3,8 +3,13 @@
 import { Suspense, useCallback, useEffect, useMemo, useState } from "react";
 import { useSearchParams, useRouter } from "next/navigation";
 
-import type { CandidateResult, RunSummary, WatchConfig } from "@/lib/types";
-import { getResults, getRuns, getWatch } from "@/lib/api";
+import type {
+  CandidateResult,
+  DigestOutput,
+  RunSummary,
+  WatchConfig,
+} from "@/lib/types";
+import { getDigest, getResults, getRuns, getWatch, getWatches } from "@/lib/api";
 
 import ResultsTable from "@/components/dashboard/ResultsTable";
 import FilterBar from "@/components/dashboard/FilterBar";
@@ -20,6 +25,10 @@ import EmptyState from "@/components/ui/EmptyState";
 // ---------------------------------------------------------------------------
 
 type TabKey = "results" | "changes";
+
+function isTabKey(value: string | null): value is TabKey {
+  return value === "results" || value === "changes";
+}
 
 // ---------------------------------------------------------------------------
 // Loading skeleton
@@ -92,24 +101,29 @@ function DashboardContent() {
   const searchParams = useSearchParams();
   const router = useRouter();
 
-  // Read initial URL params
-  const initialWatchId = searchParams.get("watch_id");
-  const initialRunId = searchParams.get("run_id");
-  const initialTab = (searchParams.get("tab") as TabKey) || "results";
-  const initialSynthesisOverview = searchParams.get("synthesis_overview");
+  // Read active URL params (these can change without remount)
+  const watchId = searchParams.get("watch_id");
+  const runIdFromParams = searchParams.get("run_id");
+  const tabFromParamsRaw = searchParams.get("tab");
+  const tabFromParams: TabKey = isTabKey(tabFromParamsRaw)
+    ? tabFromParamsRaw
+    : "results";
+  const synthesisOverviewFromParams = searchParams.get("synthesis_overview");
 
   // Core state
-  const [watchId] = useState<string | null>(initialWatchId);
-  const [runId, setRunId] = useState<string | null>(initialRunId);
-  const [activeTab, setActiveTab] = useState<TabKey>(initialTab);
+  const [runId, setRunId] = useState<string | null>(runIdFromParams);
+  const [activeTab, setActiveTab] = useState<TabKey>(tabFromParams);
+  const isAggregateMode = !watchId && !runIdFromParams;
 
   // Data state
   const [watch, setWatch] = useState<WatchConfig | null>(null);
   const [runs, setRuns] = useState<RunSummary[]>([]);
   const [results, setResults] = useState<CandidateResult[]>([]);
+  const [digest, setDigest] = useState<DigestOutput | null>(null);
+  const [watches, setWatches] = useState<WatchConfig[]>([]);
   const [filteredResults, setFilteredResults] = useState<CandidateResult[]>([]);
   const [expandedId, setExpandedId] = useState<string | null>(null);
-  const [synthesisOverview, setSynthesisOverview] = useState<string | null>(initialSynthesisOverview);
+  const [synthesisOverview, setSynthesisOverview] = useState<string | null>(synthesisOverviewFromParams);
 
   // Loading / error state
   const [loading, setLoading] = useState(true);
@@ -124,7 +138,28 @@ function DashboardContent() {
     setError(null);
 
     try {
-      let effectiveRunId = initialRunId;
+      if (isAggregateMode) {
+        setWatch(null);
+        setRuns([]);
+        const [digestData, watchesData] = await Promise.all([
+          getDigest(7),
+          getWatches(),
+        ]);
+        setDigest(digestData);
+        setWatches(watchesData);
+        setResults([]);
+        setFilteredResults([]);
+        return;
+      }
+
+      setDigest(null);
+      setWatches([]);
+      if (!watchId) {
+        setWatch(null);
+        setRuns([]);
+      }
+
+      let effectiveRunId = runIdFromParams;
 
       // If we have a watch_id, fetch watch details and runs
       if (watchId) {
@@ -147,18 +182,34 @@ function DashboardContent() {
         const resultsData = await getResults(effectiveRunId);
         setResults(resultsData);
         setFilteredResults(resultsData);
+      } else {
+        setResults([]);
+        setFilteredResults([]);
       }
     } catch (err) {
       setError(err instanceof Error ? err.message : "Failed to load data");
     } finally {
       setLoading(false);
     }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [watchId]);
+  }, [isAggregateMode, runIdFromParams, watchId]);
 
   useEffect(() => {
     fetchData();
   }, [fetchData]);
+
+  // Keep local state in sync with URL param transitions.
+  useEffect(() => {
+    setRunId(runIdFromParams);
+    setExpandedId(null);
+  }, [runIdFromParams]);
+
+  useEffect(() => {
+    setActiveTab(tabFromParams);
+  }, [tabFromParams]);
+
+  useEffect(() => {
+    setSynthesisOverview(synthesisOverviewFromParams);
+  }, [synthesisOverviewFromParams]);
 
   // -----------------------------------------------------------------------
   // Results fetching for run switching
@@ -234,7 +285,7 @@ function DashboardContent() {
   );
 
   // Page title
-  const pageTitle = watch?.name ?? "Ad-hoc Results";
+  const pageTitle = watch?.name ?? (isAggregateMode ? "Dashboard Overview" : "Ad-hoc Results");
 
   // -----------------------------------------------------------------------
   // Render
@@ -264,7 +315,7 @@ function DashboardContent() {
             {/* Toolbar: RunSelector + CsvExport */}
             <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
               <div>
-                {runs.length > 0 && (
+                {!isAggregateMode && runs.length > 0 && (
                   <RunSelector
                     runs={runs}
                     currentRunId={runId}
@@ -272,7 +323,7 @@ function DashboardContent() {
                   />
                 )}
               </div>
-              <CsvExport results={filteredResults} />
+              {!isAggregateMode && <CsvExport results={filteredResults} />}
             </div>
 
             {/* Error state */}
@@ -297,7 +348,73 @@ function DashboardContent() {
             {loading && <TableSkeleton />}
 
             {/* Results content */}
-            {!loading && !error && (
+            {!loading && !error && isAggregateMode && (
+              <div className="space-y-6">
+                <div className="rounded-lg border border-blue-200 dark:border-blue-800 bg-blue-50 dark:bg-blue-950/30 px-4 py-3">
+                  <p className="text-xs font-semibold uppercase tracking-wide text-blue-700 dark:text-blue-300">
+                    Aggregate Overview
+                  </p>
+                  <p className="mt-1 text-sm text-blue-900 dark:text-blue-100 leading-relaxed">
+                    {digest?.summary ?? "No aggregate summary is available yet."}
+                  </p>
+                  <p className="mt-2 text-xs text-blue-700/80 dark:text-blue-300/80">
+                    Based on {watches.length} configured watches over the last 7 days.
+                  </p>
+                </div>
+
+                {(digest?.top_opportunities?.length ?? 0) > 0 && (
+                  <div className="rounded-lg border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-900 p-4">
+                    <h2 className="text-sm font-semibold text-gray-900 dark:text-gray-100">
+                      Top Opportunities
+                    </h2>
+                    <ul className="mt-3 space-y-2">
+                      {digest?.top_opportunities.map((item) => (
+                        <li
+                          key={`${item.watch_name}-${item.display_label}`}
+                          className="rounded-md border border-gray-200 dark:border-gray-700 px-3 py-2"
+                        >
+                          <p className="text-sm font-medium text-gray-900 dark:text-gray-100">
+                            {item.display_label}
+                          </p>
+                          <p className="text-xs text-gray-600 dark:text-gray-300">
+                            {item.reason}
+                          </p>
+                          <p className="text-xs text-gray-500 dark:text-gray-400">
+                            Watch: {item.watch_name}
+                          </p>
+                        </li>
+                      ))}
+                    </ul>
+                  </div>
+                )}
+
+                {(digest?.per_watch?.length ?? 0) > 0 && (
+                  <div className="rounded-lg border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-900 p-4">
+                    <h2 className="text-sm font-semibold text-gray-900 dark:text-gray-100">
+                      Watch Highlights
+                    </h2>
+                    <ul className="mt-3 space-y-3">
+                      {digest?.per_watch.map((watchDigest) => (
+                        <li key={watchDigest.watch_name} className="border-b border-gray-100 dark:border-gray-800 pb-3 last:border-0 last:pb-0">
+                          <p className="text-sm font-medium text-gray-900 dark:text-gray-100">
+                            {watchDigest.watch_name}
+                          </p>
+                          <p className="text-xs text-gray-600 dark:text-gray-300">
+                            {watchDigest.summary}
+                          </p>
+                          <p className="text-xs text-gray-500 dark:text-gray-400">
+                            Changes: {watchDigest.change_count}
+                            {watchDigest.highlight ? ` • ${watchDigest.highlight}` : ""}
+                          </p>
+                        </li>
+                      ))}
+                    </ul>
+                  </div>
+                )}
+              </div>
+            )}
+
+            {!loading && !error && !isAggregateMode && (
               <>
                 {/* Synthesis overview */}
                 <SynthesisOverview overview={synthesisOverview} />
@@ -347,7 +464,7 @@ function DashboardContent() {
             )}
 
             {/* Empty state when no results and not loading */}
-            {!loading && !error && results.length === 0 && (
+            {!loading && !error && !isAggregateMode && results.length === 0 && (
               <EmptyState
                 title="No results available"
                 description={

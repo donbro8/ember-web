@@ -2,9 +2,56 @@
 
 import type { CandidateResult } from "@/lib/types";
 import Badge from "@/components/ui/Badge";
+import {
+  clinicalTrialsStudyUrl,
+  doiUrl,
+  normalizeSafeHttpUrl,
+  pubMedUrl,
+} from "@/components/dashboard/linkSafety";
 
 interface RowExpansionProps {
   result: CandidateResult;
+}
+
+interface VerifiedLink {
+  label: string;
+  url: string | null;
+  verified: boolean;
+}
+
+function normalizeLinks(value: unknown, fallbackLabel: string): VerifiedLink[] {
+  if (!Array.isArray(value)) return [];
+  const links: VerifiedLink[] = [];
+  for (const item of value) {
+    if (!item || typeof item !== "object") continue;
+    const map = item as Record<string, unknown>;
+    const safeUrl = normalizeSafeHttpUrl(map.url);
+    links.push({
+      label:
+        typeof map.label === "string" && map.label.trim().length > 0
+          ? map.label.trim()
+          : fallbackLabel,
+      url: safeUrl,
+      verified: Boolean(map.verified ?? map.is_verified ?? false),
+    });
+  }
+  return links;
+}
+
+function dedupeLinks(links: VerifiedLink[]): VerifiedLink[] {
+  const seen = new Map<string, VerifiedLink>();
+  const rejected: VerifiedLink[] = [];
+  for (const link of links) {
+    if (!link.url) {
+      rejected.push(link);
+      continue;
+    }
+    const existing = seen.get(link.url);
+    if (!existing || link.verified) {
+      seen.set(link.url, link);
+    }
+  }
+  return Array.from(seen.values()).concat(rejected);
 }
 
 function toStringList(value: unknown): string[] {
@@ -121,6 +168,7 @@ function ScoreBar({ label, value }: { label: string; value: number | null }) {
 }
 
 export default function RowExpansion({ result }: RowExpansionProps) {
+  const dynamic = result as CandidateResult & Record<string, unknown>;
   const populatedJurisdictions = toStringList(
     result.jurisdictions ??
     result.jurisdictions_populated ??
@@ -149,6 +197,77 @@ export default function RowExpansion({ result }: RowExpansionProps) {
     populatedJurisdictions.length > 0 ||
     missingJurisdictions.length > 0 ||
     unknownJurisdictions.length > 0;
+  const patentLinks = dedupeLinks(
+    result.patents
+      .map((p) => {
+        const safeUrl = normalizeSafeHttpUrl(p.url);
+        return {
+          label: `${p.country_code} ${p.publication_number}`,
+          url: safeUrl,
+          verified: true,
+        };
+      })
+      .filter((item): item is VerifiedLink => Boolean(item)),
+  );
+  const trialLinks = dedupeLinks(
+    result.trials
+      .map((t) => {
+        const safeUrl = normalizeSafeHttpUrl(t.url) ?? clinicalTrialsStudyUrl(t.nct_id);
+        return {
+          label: t.nct_id,
+          url: safeUrl,
+          verified: true,
+        };
+      })
+      .filter((item): item is VerifiedLink => Boolean(item)),
+  );
+  const articleLinks = dedupeLinks(
+    result.articles.reduce<VerifiedLink[]>((acc, a) => {
+        const safeArticleUrl = normalizeSafeHttpUrl(a.url);
+        if (safeArticleUrl) {
+          acc.push({ label: a.title, url: safeArticleUrl, verified: true });
+          return acc;
+        }
+        const safeDoiUrl = doiUrl(a.doi);
+        if (safeDoiUrl) {
+          acc.push({ label: `${a.title} (DOI)`, url: safeDoiUrl, verified: true });
+          return acc;
+        }
+        const safePubMedUrl = pubMedUrl(a.pmid);
+        if (safePubMedUrl) {
+          acc.push({ label: `${a.title} (PubMed)`, url: safePubMedUrl, verified: true });
+          return acc;
+        }
+        return acc;
+      }, []),
+  );
+  const targetLinks = dedupeLinks(
+    normalizeLinks(dynamic.target_links, "Target reference").concat(
+      normalizeLinks(dynamic.target_source_links, "Target reference"),
+    ),
+  );
+  const drugDatabaseLinks = dedupeLinks(
+    normalizeLinks(dynamic.drug_database_links, "Drug database").concat(
+      normalizeLinks(dynamic.drug_links, "Drug database"),
+    ),
+  );
+  const verifiedSourceLinks = dedupeLinks(
+    normalizeLinks(dynamic.verified_source_links, "Verified source").concat(
+      result.sources_contributed.map((source, i) => {
+        const url = normalizeSafeHttpUrl(result.source_urls[i]);
+        return { label: source, url, verified: false };
+      }),
+    ),
+  );
+
+  const groupedEvidence: { heading: string; links: VerifiedLink[] }[] = [
+    { heading: "Patent links", links: patentLinks },
+    { heading: "Trial links", links: trialLinks },
+    { heading: "Article links", links: articleLinks },
+    { heading: "Target links", links: targetLinks },
+    { heading: "Drug database links", links: drugDatabaseLinks },
+    { heading: "Source links", links: verifiedSourceLinks },
+  ].filter((group) => group.links.length > 0);
 
   return (
     <div className="bg-gray-50 dark:bg-gray-800/40 px-6 py-5 space-y-6 border-t border-gray-200 dark:border-gray-700">
@@ -172,40 +291,47 @@ export default function RowExpansion({ result }: RowExpansionProps) {
                 </tr>
               </thead>
               <tbody className="divide-y divide-gray-100 dark:divide-gray-800 bg-white dark:bg-gray-900">
-                {result.patents.map((p, i) => (
-                  <tr key={`${p.publication_number}-${i}`}>
-                    <td className="px-3 py-2 text-gray-700 dark:text-gray-300 whitespace-nowrap">
-                      {p.country_name} ({p.country_code})
-                    </td>
-                    <td className="px-3 py-2 text-gray-700 dark:text-gray-300 whitespace-nowrap">
-                      {p.publication_number}
-                    </td>
-                    <td className="px-3 py-2 text-gray-500 dark:text-gray-400 whitespace-nowrap">
-                      {p.filing_date ?? "\u2014"}
-                    </td>
-                    <td className="px-3 py-2 text-gray-500 dark:text-gray-400 whitespace-nowrap">
-                      {p.grant_date ?? "\u2014"}
-                    </td>
-                    <td className="px-3 py-2 text-gray-500 dark:text-gray-400 whitespace-nowrap">
-                      {p.expiry_date
-                        ? `${p.expiry_date_approximate ? "\u2248" : ""}${p.expiry_date}`
-                        : "\u2014"}
-                    </td>
-                    <td className="px-3 py-2 whitespace-nowrap">
-                      <Badge label={p.status} variant={statusVariant(p.status)} />
-                    </td>
-                    <td className="px-3 py-2 whitespace-nowrap">
-                      <a
-                        href={p.url}
-                        target="_blank"
-                        rel="noopener noreferrer"
-                        className="text-blue-600 dark:text-blue-400 hover:underline"
-                      >
-                        Google Patents
-                      </a>
-                    </td>
-                  </tr>
-                ))}
+                {result.patents.map((p, i) => {
+                  const safePatentUrl = normalizeSafeHttpUrl(p.url);
+                  return (
+                    <tr key={`${p.publication_number}-${i}`}>
+                        <td className="px-3 py-2 text-gray-700 dark:text-gray-300 whitespace-nowrap">
+                          {p.country_name} ({p.country_code})
+                        </td>
+                        <td className="px-3 py-2 text-gray-700 dark:text-gray-300 whitespace-nowrap">
+                          {p.publication_number}
+                        </td>
+                        <td className="px-3 py-2 text-gray-500 dark:text-gray-400 whitespace-nowrap">
+                          {p.filing_date ?? "\u2014"}
+                        </td>
+                        <td className="px-3 py-2 text-gray-500 dark:text-gray-400 whitespace-nowrap">
+                          {p.grant_date ?? "\u2014"}
+                        </td>
+                        <td className="px-3 py-2 text-gray-500 dark:text-gray-400 whitespace-nowrap">
+                          {p.expiry_date
+                            ? `${p.expiry_date_approximate ? "\u2248" : ""}${p.expiry_date}`
+                            : "\u2014"}
+                        </td>
+                        <td className="px-3 py-2 whitespace-nowrap">
+                          <Badge label={p.status} variant={statusVariant(p.status)} />
+                        </td>
+                        <td className="px-3 py-2 whitespace-nowrap">
+                          {safePatentUrl ? (
+                            <a
+                              href={safePatentUrl}
+                              target="_blank"
+                              rel="noopener noreferrer"
+                              className="text-blue-600 dark:text-blue-400 hover:underline"
+                            >
+                              Google Patents
+                            </a>
+                          ) : (
+                            <span className="text-gray-500 dark:text-gray-400">Unavailable</span>
+                          )}
+                        </td>
+                    </tr>
+                  );
+                })}
               </tbody>
             </table>
           </div>
@@ -337,39 +463,48 @@ export default function RowExpansion({ result }: RowExpansionProps) {
             Clinical Trials
           </h4>
           <ul className="space-y-2">
-            {result.trials.map((t, i) => (
-              <li
-                key={`${t.nct_id}-${i}`}
-                className="rounded border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-900 px-3 py-2 text-sm"
-              >
-                <div className="flex flex-wrap items-center gap-x-3 gap-y-1">
-                  <a
-                    href={`https://clinicaltrials.gov/study/${t.nct_id}`}
-                    target="_blank"
-                    rel="noopener noreferrer"
-                    className="font-medium text-blue-600 dark:text-blue-400 hover:underline"
-                  >
-                    {t.nct_id}
-                  </a>
-                  {t.phase && (
-                    <span className="text-gray-600 dark:text-gray-400">
-                      Phase: {t.phase}
-                    </span>
-                  )}
-                  {t.status && (
-                    <span className="text-gray-600 dark:text-gray-400">
-                      Status: {t.status}
-                    </span>
-                  )}
-                </div>
-                {(t.indication || t.sponsor) && (
-                  <div className="mt-1 flex flex-wrap gap-x-3 text-gray-500 dark:text-gray-400">
-                    {t.indication && <span>Indication: {t.indication}</span>}
-                    {t.sponsor && <span>Sponsor: {t.sponsor}</span>}
+            {result.trials.map((t, i) => {
+              const safeTrialUrl = clinicalTrialsStudyUrl(t.nct_id);
+              return (
+                <li
+                  key={`${t.nct_id}-${i}`}
+                  className="rounded border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-900 px-3 py-2 text-sm"
+                >
+                  <div className="flex flex-wrap items-center gap-x-3 gap-y-1">
+                    {safeTrialUrl ? (
+                      <a
+                        href={safeTrialUrl}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        className="font-medium text-blue-600 dark:text-blue-400 hover:underline"
+                      >
+                        {t.nct_id}
+                      </a>
+                    ) : (
+                      <span className="font-medium text-gray-700 dark:text-gray-300">
+                        {t.nct_id}
+                      </span>
+                    )}
+                    {t.phase && (
+                      <span className="text-gray-600 dark:text-gray-400">
+                        Phase: {t.phase}
+                      </span>
+                    )}
+                    {t.status && (
+                      <span className="text-gray-600 dark:text-gray-400">
+                        Status: {t.status}
+                      </span>
+                    )}
                   </div>
-                )}
-              </li>
-            ))}
+                  {(t.indication || t.sponsor) && (
+                    <div className="mt-1 flex flex-wrap gap-x-3 text-gray-500 dark:text-gray-400">
+                      {t.indication && <span>Indication: {t.indication}</span>}
+                      {t.sponsor && <span>Sponsor: {t.sponsor}</span>}
+                    </div>
+                  )}
+                </li>
+              );
+            })}
           </ul>
         </section>
       )}
@@ -381,40 +516,44 @@ export default function RowExpansion({ result }: RowExpansionProps) {
             Articles
           </h4>
           <ul className="space-y-2">
-            {result.articles.map((a, i) => (
-              <li
-                key={`${a.pmid ?? a.doi ?? i}`}
-                className="rounded border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-900 px-3 py-2 text-sm"
-              >
-                <p className="font-medium text-gray-900 dark:text-gray-100">
-                  {a.title}
-                </p>
-                <div className="mt-1 flex flex-wrap gap-x-3 text-gray-500 dark:text-gray-400">
-                  {a.journal && <span>{a.journal}</span>}
-                  {a.year != null && <span>{a.year}</span>}
-                  {a.doi && (
-                    <a
-                      href={`https://doi.org/${a.doi}`}
-                      target="_blank"
-                      rel="noopener noreferrer"
-                      className="text-blue-600 dark:text-blue-400 hover:underline"
-                    >
-                      DOI
-                    </a>
-                  )}
-                  {a.pmid && (
-                    <a
-                      href={`https://pubmed.ncbi.nlm.nih.gov/${a.pmid}`}
-                      target="_blank"
-                      rel="noopener noreferrer"
-                      className="text-blue-600 dark:text-blue-400 hover:underline"
-                    >
-                      PubMed
-                    </a>
-                  )}
-                </div>
-              </li>
-            ))}
+            {result.articles.map((a, i) => {
+              const safeDoiUrl = doiUrl(a.doi);
+              const safePubMedUrl = pubMedUrl(a.pmid);
+              return (
+                <li
+                  key={`${a.pmid ?? a.doi ?? i}`}
+                  className="rounded border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-900 px-3 py-2 text-sm"
+                >
+                  <p className="font-medium text-gray-900 dark:text-gray-100">
+                    {a.title}
+                  </p>
+                  <div className="mt-1 flex flex-wrap gap-x-3 text-gray-500 dark:text-gray-400">
+                    {a.journal && <span>{a.journal}</span>}
+                    {a.year != null && <span>{a.year}</span>}
+                    {safeDoiUrl && (
+                      <a
+                        href={safeDoiUrl}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        className="text-blue-600 dark:text-blue-400 hover:underline"
+                      >
+                        DOI
+                      </a>
+                    )}
+                    {safePubMedUrl && (
+                      <a
+                        href={safePubMedUrl}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        className="text-blue-600 dark:text-blue-400 hover:underline"
+                      >
+                        PubMed
+                      </a>
+                    )}
+                  </div>
+                </li>
+              );
+            })}
           </ul>
         </section>
       )}
@@ -444,32 +583,43 @@ export default function RowExpansion({ result }: RowExpansionProps) {
       )}
 
       {/* Sources */}
-      {result.sources_contributed.length > 0 && (
+      {groupedEvidence.length > 0 && (
         <section>
           <h4 className="text-sm font-semibold text-gray-900 dark:text-gray-100 mb-2">
-            Sources
+            Evidence Links
           </h4>
-          <ul className="space-y-1">
-            {result.sources_contributed.map((source, i) => {
-              const url = result.source_urls[i] ?? null;
-              return (
-                <li key={`${source}-${i}`} className="text-sm text-gray-700 dark:text-gray-300">
-                  {url ? (
-                    <a
-                      href={url}
-                      target="_blank"
-                      rel="noopener noreferrer"
-                      className="text-blue-600 dark:text-blue-400 hover:underline"
-                    >
-                      {source}
-                    </a>
-                  ) : (
-                    source
-                  )}
-                </li>
-              );
-            })}
-          </ul>
+          <div className="grid gap-3 md:grid-cols-2">
+            {groupedEvidence.map((group) => (
+              <div key={group.heading} className="rounded border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-900 p-3">
+                <p className="mb-2 text-xs font-semibold uppercase tracking-wide text-gray-600 dark:text-gray-400">
+                  {group.heading}
+                </p>
+                <ul className="space-y-1">
+                  {group.links.map((link) => (
+                    <li key={`${group.heading}-${link.url ?? `unavailable-${link.label}`}`} className="text-sm text-gray-700 dark:text-gray-300">
+                      {link.url ? (
+                        <a
+                          href={link.url}
+                          target="_blank"
+                          rel="noopener noreferrer"
+                          className="text-blue-600 dark:text-blue-400 hover:underline"
+                        >
+                          {link.label}
+                        </a>
+                      ) : (
+                        <span className="text-gray-500 dark:text-gray-400">
+                          {link.label} (Unavailable)
+                        </span>
+                      )}
+                      <span className={`ml-2 text-xs ${link.verified ? "text-green-700 dark:text-green-400" : "text-gray-500 dark:text-gray-400"}`}>
+                        {link.verified ? "verified" : "unverified"}
+                      </span>
+                    </li>
+                  ))}
+                </ul>
+              </div>
+            ))}
+          </div>
         </section>
       )}
     </div>
