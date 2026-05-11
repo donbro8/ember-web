@@ -10,6 +10,8 @@ End-to-end UI verification coverage across aggregate dashboard rendering, run/ad
 - Header shows `Dashboard Overview`.
 - Results tab shows `Aggregate Overview` summary and digest sections when populated.
 - Legacy run-scoped empty prompt is not shown.
+- When `per_watch` is empty but watches exist, aggregate view still shows latest watch result rows from `digest.dashboard.per_watch_latest_results`.
+- Latest watch result rows use `latest_run_id`, `latest_status`, and `suppressed_count` from the digest API payload. Rows with null `latest_run_id` do not render broken run links.
 
 2. Run and watch navigation compatibility remains intact.
 - `/dashboard?run_id=<id>` renders run-scoped results and `Ad-hoc Results`.
@@ -27,6 +29,10 @@ End-to-end UI verification coverage across aggregate dashboard rendering, run/ad
 - `Invalid expiry date` includes only rows with non-empty invalid expiry strings.
 - Window filters (`6mo`, `1yr`, `2yr`, `5yr`) exclude unknown/invalid expiry values.
 - Unknown `exp` query values default to `all`.
+
+10. FilterBar URL synchronization preserves non-filter context params.
+- Starting from `/dashboard?run_id=<id>` with default filter state does not rewrite URL to bare `/dashboard`.
+- Starting from `/dashboard?watch_id=<id>&tab=results` keeps `watch_id` and `tab` while syncing only filter-owned params (`q`, `smin`, `smax`, `cat`, `exp`, `jur`, `bio`, `phase`).
 
 5. Filter impact counters are present.
 - Filter panel displays hidden row count, unknown expiry count, and invalid expiry count.

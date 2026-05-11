@@ -1,5 +1,6 @@
 "use client";
 
+import Link from "next/link";
 import { Suspense, useCallback, useEffect, useMemo, useState } from "react";
 import { useSearchParams, useRouter } from "next/navigation";
 
@@ -409,6 +410,60 @@ function DashboardContent() {
                         </li>
                       ))}
                     </ul>
+                  </div>
+                )}
+
+                {((digest?.dashboard?.per_watch_latest_results?.length ?? 0) > 0 || watches.length > 0) && (
+                  <div className="rounded-lg border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-900 p-4">
+                    <h2 className="text-sm font-semibold text-gray-900 dark:text-gray-100">
+                      Latest Watch Results
+                    </h2>
+                    {(digest?.per_watch?.length ?? 0) === 0 && (
+                      <p className="mt-2 text-xs text-gray-600 dark:text-gray-300">
+                        No changes detected in the selected period. Latest watch run counts are shown below.
+                      </p>
+                    )}
+                    {(digest?.dashboard?.per_watch_latest_results?.length ?? 0) > 0 ? (
+                      <ul className="mt-3 space-y-3">
+                        {digest?.dashboard?.per_watch_latest_results.map((item) => (
+                          <li
+                            key={`${item.watch_id}-${item.latest_run_id ?? "no-run"}`}
+                            className="rounded-md border border-gray-200 dark:border-gray-700 px-3 py-2"
+                          >
+                            <div className="flex flex-wrap items-center gap-x-2 gap-y-1">
+                              <Link
+                                href={`/dashboard?watch_id=${encodeURIComponent(item.watch_id)}`}
+                                className="text-sm font-medium text-blue-700 hover:underline dark:text-blue-300"
+                              >
+                                {item.watch_name}
+                              </Link>
+                              <span className="text-xs text-gray-500 dark:text-gray-400">•</span>
+                              {item.latest_run_id ? (
+                                <Link
+                                  href={`/dashboard?run_id=${encodeURIComponent(item.latest_run_id)}`}
+                                  className="text-xs text-blue-700 hover:underline dark:text-blue-300"
+                                >
+                                  {item.latest_run_id}
+                                </Link>
+                              ) : (
+                                <span className="text-xs text-gray-500 dark:text-gray-400">
+                                  No run yet
+                                </span>
+                              )}
+                            </div>
+                            <p className="mt-1 text-xs text-gray-600 dark:text-gray-300">
+                              Results: {item.result_count}
+                              {item.latest_status ? ` • Status: ${item.latest_status}` : ""}
+                              {item.suppressed_count > 0 ? ` • Suppressed: ${item.suppressed_count}` : ""}
+                            </p>
+                          </li>
+                        ))}
+                      </ul>
+                    ) : (
+                      <p className="mt-3 text-xs text-gray-600 dark:text-gray-300">
+                        Latest per-watch run details are not available yet.
+                      </p>
+                    )}
                   </div>
                 )}
               </div>

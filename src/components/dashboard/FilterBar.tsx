@@ -74,6 +74,17 @@ const DEFAULT_FILTER: FilterState = {
   trialPhases: [],
 };
 
+const FILTER_PARAM_KEYS = new Set([
+  "q",
+  "smin",
+  "smax",
+  "cat",
+  "exp",
+  "jur",
+  "bio",
+  "phase",
+]);
+
 // ---------------------------------------------------------------------------
 // URL param helpers
 // ---------------------------------------------------------------------------
@@ -267,14 +278,28 @@ export default function FilterBar({ results, onFilter }: FilterBarProps) {
     const filtered = applyFilters(results, filters);
     onFilter(filtered);
 
-    const params = filtersToParams(filters);
-    const qs = params.toString();
+    const currentParams = new URLSearchParams(searchParams.toString());
+    const filterParams = filtersToParams(filters);
+
+    for (const key of FILTER_PARAM_KEYS) {
+      currentParams.delete(key);
+    }
+    for (const [key, value] of filterParams.entries()) {
+      currentParams.set(key, value);
+    }
+
+    const qs = currentParams.toString();
     const target = qs ? `${pathname}?${qs}` : pathname;
+    const currentUrl = searchParams.toString()
+      ? `${pathname}?${searchParams.toString()}`
+      : pathname;
+
+    if (target === currentUrl) return;
 
     selfUpdate.current = true;
     router.replace(target, { scroll: false });
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [filters, results, pathname]);
+  }, [filters, results, pathname, searchParams]);
 
   // Update helpers
   const update = useCallback((patch: Partial<FilterState>) => {

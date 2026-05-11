@@ -193,6 +193,30 @@ export interface WatchDigestSection {
   highlight: string | null;
 }
 
+export interface DigestDashboardWatchLatestResult {
+  watch_id: string;
+  watch_name: string;
+  latest_run_id: string | null;
+  latest_status: string | null;
+  result_count: number;
+  suppressed_count: number;
+  watch_link: string;
+  run_link: string | null;
+}
+
+export interface DigestDashboardSection {
+  top_opportunities: OpportunityHighlight[];
+  recent_changes: unknown[];
+  source_counts: Record<string, number>;
+  status_counts: Record<string, number>;
+  suppressed_count: number;
+  per_watch_latest_results: DigestDashboardWatchLatestResult[];
+  links: {
+    digest: string;
+    watches: string;
+  };
+}
+
 export interface DigestOutput {
   period_start: string;
   period_end: string;
@@ -200,6 +224,7 @@ export interface DigestOutput {
   per_watch: WatchDigestSection[];
   top_opportunities: OpportunityHighlight[];
   stable_watches: string[];
+  dashboard?: DigestDashboardSection | null;
 }
 
 // ---------------------------------------------------------------------------

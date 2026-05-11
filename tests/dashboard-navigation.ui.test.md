@@ -45,6 +45,22 @@ Covers aggregate default behavior for `/dashboard` and regression coverage for r
 - Then run-backed results are cleared
 - And aggregate overview summary content is shown.
 
+9. FilterBar URL sync preserves run context params.
+- Given navigation to `/dashboard?run_id=<id>` with default filter state
+- When `FilterBar` mounts and syncs URL state
+- Then the URL remains run-scoped and is not rewritten to bare `/dashboard`.
+
+10. FilterBar URL sync preserves watch context params.
+- Given navigation to `/dashboard?watch_id=<id>&tab=results` with default filter state
+- When `FilterBar` mounts and syncs URL state
+- Then `watch_id`/`tab` remain in the URL and only filter-owned params are added/removed.
+
+11. Aggregate latest-watch links use dashboard routes.
+- Given a digest payload with `dashboard.per_watch_latest_results[].latest_run_id`
+- Then the watch link targets `/dashboard?watch_id=<id>`
+- And the run link targets `/dashboard?run_id=<latest_run_id>`.
+- Rows with null `latest_run_id` show no-run text instead of a broken link.
+
 ## Regression Checks
 
 - Existing dashboard navigation from watch list links (`/dashboard?watch_id=...`) continues to function.
