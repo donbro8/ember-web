@@ -25,6 +25,13 @@ export interface PatentJurisdiction {
   url: string;
 }
 
+export interface RegulatoryContext {
+  data_exclusivity_framework_note: string | null;
+  data_exclusivity_verified_product: boolean | null;
+  data_exclusivity_verified_note: string | null;
+  regulatory_summary: string | null;
+}
+
 export interface TrialSummary {
   nct_id: string;
   phase: string;
@@ -62,6 +69,18 @@ export interface CandidateResult {
   patents: PatentJurisdiction[];
   earliest_patent_expiry: string | null;
   earliest_expiry_jurisdiction: string | null;
+  jurisdictions?: string[] | Record<string, unknown> | null;
+  missing_jurisdictions?: string[] | Record<string, unknown> | null;
+  unknown_jurisdictions?: string[] | Record<string, unknown> | null;
+  earliest_patent_expiry_derivation_method?: string | null;
+  earliest_patent_expiry_verified_date?: string | null;
+  data_exclusivity_expiry?: string | null;
+  data_exclusivity_regime?: string | null;
+  framework_regulatory_context?: string | Record<string, unknown> | null;
+  jurisdictions_populated?: string[] | Record<string, unknown> | null;
+  jurisdictions_missing?: string[] | Record<string, unknown> | null;
+  expiry_derivation_method?: string | null;
+  regulatory_context?: RegulatoryContext | null;
 
   // Scoring
   overall_score: number | null;

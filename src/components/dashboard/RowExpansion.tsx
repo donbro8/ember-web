@@ -7,6 +7,72 @@ interface RowExpansionProps {
   result: CandidateResult;
 }
 
+function toStringList(value: unknown): string[] {
+  if (Array.isArray(value)) {
+    return value
+      .map((item) => (typeof item === "string" ? item : null))
+      .filter((item): item is string => Boolean(item));
+  }
+
+  if (value && typeof value === "object") {
+    const entries = Object.entries(value as Record<string, unknown>);
+    const truthyKeys = entries
+      .filter(([, flag]) => {
+        if (typeof flag === "boolean") {
+          return flag;
+        }
+        if (typeof flag === "number") {
+          return flag > 0;
+        }
+        if (typeof flag === "string") {
+          return flag.trim().length > 0;
+        }
+        return flag != null;
+      })
+      .map(([key]) => key)
+      .filter(Boolean);
+    if (truthyKeys.length > 0) {
+      return truthyKeys;
+    }
+    return entries.map(([key]) => key).filter(Boolean);
+  }
+
+  return [];
+}
+
+function regulatoryContextText(value: unknown): string | null {
+  if (typeof value === "string") {
+    const trimmed = value.trim();
+    return trimmed.length > 0 ? trimmed : null;
+  }
+
+  if (value && typeof value === "object") {
+    const map = value as Record<string, unknown>;
+    const preferredFields = [
+      "summary",
+      "note",
+      "description",
+      "context",
+      "framework",
+      "regime",
+    ];
+    for (const field of preferredFields) {
+      const candidate = map[field];
+      if (typeof candidate === "string" && candidate.trim().length > 0) {
+        return candidate.trim();
+      }
+    }
+    const pairs = Object.entries(map)
+      .filter(([, val]) => val != null)
+      .map(([key, val]) => `${key}: ${String(val)}`);
+    if (pairs.length > 0) {
+      return pairs.join("; ");
+    }
+  }
+
+  return null;
+}
+
 /** Map patent status to Badge variant. */
 function statusVariant(
   status: string,
@@ -55,6 +121,35 @@ function ScoreBar({ label, value }: { label: string; value: number | null }) {
 }
 
 export default function RowExpansion({ result }: RowExpansionProps) {
+  const populatedJurisdictions = toStringList(
+    result.jurisdictions ??
+    result.jurisdictions_populated ??
+    Array.from(new Set(result.patents.map((p) => p.country_code))).sort()
+  );
+  const missingJurisdictions = toStringList(
+    result.missing_jurisdictions ?? result.jurisdictions_missing ?? [],
+  );
+  const unknownJurisdictions = toStringList(result.unknown_jurisdictions ?? []);
+  const expiryDerivationMethod =
+    result.earliest_patent_expiry_derivation_method ??
+    result.expiry_derivation_method;
+  const hasVerifiedDate = Boolean(result.earliest_patent_expiry_verified_date);
+  const frameworkRegulatoryContext = regulatoryContextText(
+    result.framework_regulatory_context ??
+      result.regulatory_context?.data_exclusivity_framework_note ??
+      result.regulatory_context?.regulatory_summary,
+  );
+  const hasRegulatoryContext =
+    result.regulatory_context != null ||
+    frameworkRegulatoryContext != null ||
+    result.data_exclusivity_regime != null ||
+    result.data_exclusivity_expiry != null ||
+    expiryDerivationMethod != null ||
+    hasVerifiedDate ||
+    populatedJurisdictions.length > 0 ||
+    missingJurisdictions.length > 0 ||
+    unknownJurisdictions.length > 0;
+
   return (
     <div className="bg-gray-50 dark:bg-gray-800/40 px-6 py-5 space-y-6 border-t border-gray-200 dark:border-gray-700">
       {/* Patent Jurisdictions */}
@@ -113,6 +208,124 @@ export default function RowExpansion({ result }: RowExpansionProps) {
                 ))}
               </tbody>
             </table>
+          </div>
+        </section>
+      )}
+
+      {/* Jurisdiction Gaps + Regulatory Context */}
+      {hasRegulatoryContext && (
+        <section>
+          <h4 className="text-sm font-semibold text-gray-900 dark:text-gray-100 mb-2">
+            Jurisdiction Coverage &amp; Regulatory Context
+          </h4>
+          <div className="rounded border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-900 p-3 space-y-3 text-sm">
+            <div>
+              <p className="font-medium text-gray-800 dark:text-gray-200">
+                Jurisdictions with patent records
+              </p>
+              {populatedJurisdictions.length > 0 ? (
+                <p className="text-gray-700 dark:text-gray-300">
+                  {populatedJurisdictions.join(", ")}
+                </p>
+              ) : (
+                <p className="text-gray-500 dark:text-gray-400">
+                  No populated jurisdiction list is available for this result.
+                </p>
+              )}
+            </div>
+
+            <div>
+              <p className="font-medium text-gray-800 dark:text-gray-200">
+                Missing jurisdiction data (gaps)
+              </p>
+              {missingJurisdictions.length > 0 ? (
+                <p className="text-gray-700 dark:text-gray-300">
+                  {missingJurisdictions.join(", ")}
+                </p>
+              ) : (
+                <p className="text-gray-500 dark:text-gray-400">
+                  No explicit gap list is provided. Missing entries do not imply no patent exists.
+                </p>
+              )}
+            </div>
+
+            <div>
+              <p className="font-medium text-gray-800 dark:text-gray-200">
+                Unknown jurisdiction coverage
+              </p>
+              {unknownJurisdictions.length > 0 ? (
+                <p className="text-gray-700 dark:text-gray-300">
+                  {unknownJurisdictions.join(", ")}
+                </p>
+              ) : (
+                <p className="text-gray-500 dark:text-gray-400">
+                  No unknown jurisdiction list is provided. Unknown entries also do not imply no patent exists.
+                </p>
+              )}
+            </div>
+
+            {expiryDerivationMethod && (
+              <div>
+                <p className="font-medium text-gray-800 dark:text-gray-200">
+                  Expiry derivation method
+                </p>
+                <p className="text-gray-700 dark:text-gray-300">
+                  {expiryDerivationMethod}
+                </p>
+              </div>
+            )}
+
+            {result.earliest_patent_expiry_verified_date && (
+              <div>
+                <p className="font-medium text-gray-800 dark:text-gray-200">
+                  Earliest patent expiry (verified date)
+                </p>
+                <p className="text-gray-700 dark:text-gray-300">
+                  {result.earliest_patent_expiry_verified_date}
+                </p>
+              </div>
+            )}
+
+            {(frameworkRegulatoryContext ||
+              result.data_exclusivity_regime ||
+              result.data_exclusivity_expiry ||
+              result.regulatory_context) && (
+              <div className="space-y-1">
+                <p className="font-medium text-gray-800 dark:text-gray-200">
+                  Data exclusivity and regulatory context
+                </p>
+                {result.data_exclusivity_regime && (
+                  <p className="text-gray-700 dark:text-gray-300">
+                    Regime: {result.data_exclusivity_regime}
+                  </p>
+                )}
+                {result.data_exclusivity_expiry && (
+                  <p className="text-gray-700 dark:text-gray-300">
+                    Data exclusivity expiry: {result.data_exclusivity_expiry}
+                  </p>
+                )}
+                {frameworkRegulatoryContext && (
+                  <p className="text-gray-700 dark:text-gray-300">
+                    Framework-level context: {frameworkRegulatoryContext}
+                  </p>
+                )}
+                {result.regulatory_context?.data_exclusivity_verified_product ? (
+                  <p className="text-gray-700 dark:text-gray-300">
+                    Product-level verification:{" "}
+                    {result.regulatory_context.data_exclusivity_verified_note ??
+                      "verified for this product."}
+                  </p>
+                ) : (
+                  <p className="text-gray-500 dark:text-gray-400">
+                    Product-level verification is not confirmed; treat this as framework-level context.
+                  </p>
+                )}
+              </div>
+            )}
+
+            <p className="text-xs text-gray-500 dark:text-gray-400">
+              Approximate dates are shown with the \u2248 prefix, while verified dates are shown without it.
+            </p>
           </div>
         </section>
       )}
